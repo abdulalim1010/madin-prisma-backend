@@ -195,16 +195,22 @@ const refreshToken = async (token: string) => {
 const googleLogin=async(payload:IGoogleLoginPayload)=>{
 let googleIdTokenPayload:TokenPayload|null|undefined=null;
 try {
-	const ticket=await googleClient.verifyIdToken({
-		idToken:payload.idToken,
-		audience:config.google_client_id
-	})
-	googleIdTokenPayload=ticket.getPayload();
+  console.log("Received ID Token:", payload.idToken);
+  console.log("Backend Google Client ID:", config.google_client_id);
+
+  const ticket = await googleClient.verifyIdToken({
+    idToken: payload.idToken,
+    audience: config.google_client_id,
+  });
+
+  googleIdTokenPayload = ticket.getPayload();
+
+  console.log("Google token verified successfully");
+  console.log("Google payload:", googleIdTokenPayload);
 } catch (error) {
-	console.log("google ID tokens verification failed",error);
-	throw new Error("Invalid or expired Google Token");
-	
-}
+  console.error("GOOGLE VERIFICATION ERROR:", error);
+  throw new Error("Invalid or expired Google Token");
+} 
 if(!googleIdTokenPayload){
 	throw new Error("Invalid or expired token");
 
@@ -235,6 +241,7 @@ if(!user){
 			role:Role.PATIENT,
 			googleId:googleIdTokenPayload.sub,
 			authProvider:"GOOGLE",
+			emailVerified:true,
 			status:UserStatus.ACTIVE,
 			patient:{
 				create:{
