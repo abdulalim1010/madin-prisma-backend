@@ -10,7 +10,8 @@ import type {
 	IRegisterPatientPayload,
 	IRequestUser,
 } from "./auth.interface";
-import { OAuth2Client } from "google-auth-library";
+import { OAuth2Client, TokenPayload } from "google-auth-library";
+import { googleClient } from "../../lib/googleAuth";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password } = payload;
@@ -90,7 +91,7 @@ const loginUser = async (payload: ILoginUserPayload) => {
 		throw new Error("User is deleted");
 	}
 
-	const isPasswordMatched = await bcrypt.compare(password, user.password);
+	const isPasswordMatched = await bcrypt.compare(password, user.password as string);
 
 	if (!isPasswordMatched) {
 		throw new Error("Invalid credentials");
@@ -192,12 +193,91 @@ const refreshToken = async (token: string) => {
 
 
 const googleLogin=async(payload:IGoogleLoginPayload)=>{
-
-const googleClint=new OAuth2Client
-
-
-
+let googleIdTokenPayload:TokenPayload|null|undefined=null;
+try {
+	const ticket=await googleClient.verifyIdToken({
+		idToken:payload.idToken,
+		audience:config.google_client_id
+	})
+	googleIdTokenPayload=ticket.getPayload();
+} catch (error) {
+	console.log("google ID tokens verification failed",error);
+	throw new Error("Invalid or expired Google Token");
+	
 }
+if(!googleIdTokenPayload){
+	throw new Error("Invalid or expired token");
+
+	
+}
+	if(!googleIdTokenPayload.email){
+		throw new Error("Email not found ");	
+	}
+	if(!googleIdTokenPayload.name){
+		throw new Error("Email not found ");	
+	}
+const ifPatientExists=await prisma.user.findUnique({
+	where:{
+		email:googleIdTokenPayload.email,
+		role:Role.PATIENT,
+		googleId:googleIdTokenPayload.sub
+
+	}
+	
+	
+})
+let user=ifPatientExists;
+if(!user){
+	 user=await prisma.user.create({
+		data:{
+			name:googleIdTokenPayload.name,
+			email:googleIdTokenPayload.email,
+			role:Role.PATIENT,
+			googleId:googleIdTokenPayload.sub,
+			authProvider:"GOOGLE",
+			status:UserStatus.ACTIVE,
+			patient:{
+				create:{
+					name:googleIdTokenPayload.name,	
+					email:googleIdTokenPayload.email
+				}
+			}
+		
+
+		}
+	})
+	
+}
+
+const jwtPayload = {
+		userId: user.id,
+		name: user.name,
+		email:user.email,
+		role: user.role,
+	};
+
+	const accessToken = jwtUtils.createToken(
+		jwtPayload,
+		config.jwt_access_secret,
+		config.jwt_access_expires_in as SignOptions,
+	);
+
+	const refreshToken = jwtUtils.createToken(
+		jwtPayload,
+		config.jwt_refresh_secret,
+		config.jwt_refresh_expires_in as SignOptions,
+	);
+
+	return {
+		accessToken,
+		refreshToken,
+	};
+
+};
+
+
+
+
 
 export const AuthService = {
 	registerPatient,
