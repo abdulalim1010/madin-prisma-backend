@@ -4,10 +4,45 @@ import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/sendResponse";
 import type { IRequestUser } from "./auth.interface";
 import { AuthService } from "./auth.service";
+import z from "zod";
 
+
+
+
+
+const patientRegisterZodSchema = z.object({
+  name: z.string().min(3).max(50),
+
+  email: z.string().email(),
+
+  password: z.string()
+  .min(8, { message: "Password must be at least 8 characters long." })
+  .max(32, { message: "Password cannot exceed 32 characters." })
+  .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter." })
+  .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter." })
+  .regex(/[0-9]/, { message: "Password must contain at least one number." })
+  .regex(/[^A-Za-z0-9]/, { message: "Password must contain at least one special character." }),
+
+
+  patient:z
+    .object({
+      contactNumber: z.string().optional(),
+    })
+    .optional(),
+});
 const registerPatient = catchAsync(async (req: Request, res: Response) => {
-	const payload = req.body;
-	const result = await AuthService.registerPatient(payload);
+	const payload = patientRegisterZodSchema.safeParse(req.body);
+
+if(!payload.success){
+	throw new Error(payload.error.message);
+}
+
+
+
+
+
+
+	const result = await AuthService.registerPatient(payload.data);
 
 	const { accessToken, refreshToken, user, patient } = result;
 
