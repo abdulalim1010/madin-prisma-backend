@@ -5,71 +5,52 @@ import { sendResponse } from "../../utils/sendResponse";
 import type { IRequestUser } from "./auth.interface";
 import { AuthService } from "./auth.service";
 import z from "zod";
+import { authErrorValidation } from "./auth.erorValidation";
 
 
 
 
-
-const patientRegisterZodSchema = z.object({
-  name: z.string().min(3).max(50),
-
-  email: z.string().email(),
-
-  password: z.string()
-  .min(8, { message: "Password must be at least 8 characters long." })
-  .max(32, { message: "Password cannot exceed 32 characters." })
-  .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter." })
-  .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter." })
-  .regex(/[0-9]/, { message: "Password must contain at least one number." })
-  .regex(/[^A-Za-z0-9]/, { message: "Password must contain at least one special character." }),
-
-
-  patient:z
-    .object({
-      contactNumber: z.string().optional(),
-    })
-    .optional(),
-});
 const registerPatient = catchAsync(async (req: Request, res: Response) => {
-	const payload = patientRegisterZodSchema.safeParse(req.body);
+//   const payload = authErrorValidation.patientRegisterZodSchema.safeParse(req.body);
 
-if(!payload.success){
-	throw new Error(payload.error.message);
-}
+//   if (!payload.success) {
+//     const errorMessage = payload.error.issues
+//       .map((issue) => issue.message)
+//       .join(", ");
 
+//     throw new Error(errorMessage);
+//   }
+const payload=req.body
 
+  const result = await AuthService.registerPatient(payload);
 
+  const { accessToken, refreshToken, user, patient } = result;
 
+  res.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24,
+  });
 
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+  });
 
-	const result = await AuthService.registerPatient(payload.data);
-
-	const { accessToken, refreshToken, user, patient } = result;
-
-	res.cookie("accessToken", accessToken, {
-		httpOnly: true,
-		secure: false,
-		sameSite: "none",
-		maxAge: 1000 * 60 * 60 * 24, // 24 hour or 1 day
-	});
-	res.cookie("refreshToken", refreshToken, {
-		httpOnly: true,
-		secure: false,
-		sameSite: "none",
-		maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-	});
-
-	sendResponse(res, {
-		statusCode: httpStatus.CREATED,
-		success: true,
-		message: "Patient registered successfully",
-		data: {
-			accessToken,
-			refreshToken,
-			user,
-			patient,
-		},
-	});
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: "Patient registered successfully",
+    data: {
+      accessToken,
+      refreshToken,
+      user,
+      patient,
+    },
+  });
 });
 
 const loginUser = catchAsync(async (req: Request, res: Response) => {
