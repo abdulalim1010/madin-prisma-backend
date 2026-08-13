@@ -11,6 +11,7 @@ import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
 import { AuthRoutes } from "./app/module/auth/auth.route";
 import z from "zod";
+import { redisClient } from "./app/lib/redis";
 
 const app: Application = express();
 
@@ -30,31 +31,35 @@ app.use(cookieParser());
 
 app.use("/api/v1/auth", AuthRoutes);
 
-app.post("zod", (req: Request, res: Response) => {
+app.get("/test", async(req: Request, res: Response) => {
 
 try {
-	const UserZodSchema = z.object({
-		nsme:z.string().endsWith("a"),
-		email:z.string().email(),
-		password:z.string().min(6),
-		age:z.number().int().positive(),
-		isVerified:z.boolean().optional(),
-		books:z.array(z.string()).optional(),	
+
+await redisClient.set("forget password otp:patient@gmail.com","123456",({
+	expiration:{
+		type:"EX",
+		value:60
+	}
+}))
+	
+
+
+
+	res.status(httpStatus.OK).json({
+		success:true,
+		message:"welcome to the Ph madin hlthcare",
+		data:null
 	})
 	
 } catch (error) {
+	console.log(error);
+	next(error)
 	
 }
-
-
-const payload = req.body;
-
-	res.status(httpStatus.OK).json({
-		success: true,
-		message: "Welcome to PH Healthcare System Backend",
-	});
-
+	
+	
 })
+
 
 // Basic route
 app.get("/", async (req: Request, res: Response) => {
