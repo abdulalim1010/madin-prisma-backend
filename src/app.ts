@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, {
+	NextFunction,
 	type Application,
 	type Request,
 	type Response,
@@ -12,6 +13,7 @@ import { notFound } from "./app/middleware/notFound";
 import { AuthRoutes } from "./app/module/auth/auth.route";
 import z from "zod";
 import { redisClient } from "./app/lib/redis";
+import crypto from "crypto"
 
 const app: Application = express();
 
@@ -31,24 +33,24 @@ app.use(cookieParser());
 
 app.use("/api/v1/auth", AuthRoutes);
 
-app.get("/test", async(req: Request, res: Response) => {
+app.get("/test", async(req: Request, res: Response,next:NextFunction) => {
 
 try {
 
-await redisClient.set("forget password otp:patient@gmail.com","123456",({
-	expiration:{
-		type:"EX",
-		value:60
-	}
-}))
+// await redisClient.set("forget password otp:patient@gmail.com","123456",({
+// 	expiration:{
+// 		type:"EX",
+// 		value:60
+// 	}
+// }))
 	
 
-
+const otp=crypto.randomInt(100000,1000000)
 
 	res.status(httpStatus.OK).json({
 		success:true,
 		message:"welcome to the Ph madin hlthcare",
-		data:null
+		data:otp
 	})
 	
 } catch (error) {
