@@ -49,7 +49,7 @@ router.post(
         .join(", ");
 
       return next(new Error(errorMessage));
-    }
+    }   
 
     req.body = result.data;
 
