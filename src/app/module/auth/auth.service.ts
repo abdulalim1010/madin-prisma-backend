@@ -22,6 +22,7 @@ import {  TokenPayload } from "google-auth-library";
 import { googleClient } from "../../lib/googleAuth";
 import { redisClient } from "../../lib/redis";
 import { RedisClient } from "redis";
+import { transporter } from "../../lib/nodemailer";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password,patient:patientData } = payload;
@@ -394,6 +395,14 @@ await redisClient.set(key,otp,{
 		type:"EX",
 		value:5*60
 	}
+})
+
+await transporter.sendMail({
+	from:config.email_sender,
+	to:isUserExist.email,
+	subject:"forget password",
+	text:`Your OTP is ${otp} `
+
 })
 }
 const resetPassword=async(payload:IResetPasswordPayload)=>{
