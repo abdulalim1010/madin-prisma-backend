@@ -18,9 +18,10 @@ import type {
 	IRequestUser,
 	IResetPasswordPayload,
 } from "./auth.interface";
-import { OAuth2Client, TokenPayload } from "google-auth-library";
+import {  TokenPayload } from "google-auth-library";
 import { googleClient } from "../../lib/googleAuth";
 import { redisClient } from "../../lib/redis";
+import { RedisClient } from "redis";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password,patient:patientData } = payload;
@@ -371,6 +372,11 @@ const forgetPassword=async(payload:IfogetPasswordPayload)=>{
 		throw new Error("user is blocked");
 		
 	}
+
+	if(!isUserExist.emailVerified){
+		throw new Error("user not verified");
+		
+	}
 	if(isUserExist.isDeleted || isUserExist.status==="DELETED"){
 		throw new Error("User is deleted");
 		
@@ -390,8 +396,64 @@ await redisClient.set(key,otp,{
 	}
 })
 }
-const resetPassword=(payload:IResetPasswordPayload)=>{
+const resetPassword=async(payload:IResetPasswordPayload)=>{
+	
+	  const { email, otp, newPassword } = payload;
+	const isUserExist=await prisma.user.findUnique({
+		where:{
+			email
+		}
 
+	})
+
+
+	if(!isUserExist){
+		throw new Error("User does exists?");
+		
+	}
+
+	if(isUserExist.status==="BLOCKED"){
+		throw new Error("user is blocked");
+		
+	}
+
+	if(!isUserExist.emailVerified){
+		throw new Error("user not verified");
+		
+	}
+	if(isUserExist.isDeleted || isUserExist.status==="DELETED"){
+		throw new Error("User is deleted");
+		
+}
+
+if(isUserExist.googleId &&  isUserExist.authProvider==="GOOGLE"){
+	throw new Error("User is Acoount is google ");
+	
+}
+const key=`forget-password-otp:${isUserExist.email}`
+const redisOtp=await redisClient.get(key)
+
+
+if(!redisOtp){
+	throw new Error("invalid otp");
+	
+}
+if(redisOtp !== otp){
+	throw new Error("OTP does not match");
+	
+}
+
+
+const hashedPassword=await bcrypt.hash(newPassword,Number(config.bcrypt_salt_rounds))
+const updateUser=await prisma.user.update({
+	where:{
+		email:isUserExist.email
+	},
+	data:{
+		password:hashedPassword
+	}
+});
+await redisClient.del([key]);
 }
 
 
