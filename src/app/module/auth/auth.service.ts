@@ -219,6 +219,33 @@ const verifyEmail = async (payload: IverifyEmailPayload) => {
 
 
 	await redisClient.del(patientRegistrationKey)
+
+
+
+	const templatePath = path.join(
+    process.cwd(),
+    "src/app/templets/patient-welcome.ejs",
+);
+
+const templateData = {
+    name: createdUser.name,
+    email: createdUser.email,
+    loginUrl: `${config.frontend_url}/login`,
+};
+
+const html = await ejs.renderFile(
+    templatePath,
+    templateData,
+);
+
+await transporter.sendMail({
+    from: config.email_sender,
+    to: createdUser.email,
+    subject: "Welcome to PH Madin Healthcare",
+    html,
+});
+
+	
 	// 6. Separate patient and user
 	// ==========================================
 
