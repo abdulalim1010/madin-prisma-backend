@@ -216,6 +216,9 @@ const verifyEmail = async (payload: IverifyEmailPayload) => {
 	]);
 
 	// ==========================================
+
+
+	await redisClient.del(patientRegistrationKey)
 	// 6. Separate patient and user
 	// ==========================================
 
