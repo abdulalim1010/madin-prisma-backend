@@ -521,6 +521,36 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
 					},
 				},
 			});
+
+
+
+	const templatePath = path.join(
+    process.cwd(),
+    "src/app/templets/patient-welcome.ejs",
+);
+
+const templateData = {
+    name: user.name,
+    email: user.email,
+    loginUrl: `${config.frontend_url}/login`,
+};
+
+const html = await ejs.renderFile(
+    templatePath,
+    templateData,
+);
+
+await transporter.sendMail({
+    from: config.email_sender,
+    to: user.email,
+    subject: "Welcome to PH Madin Healthcare",
+    html,
+});
+
+	
+	//
+
+
 		}
 	}
 
