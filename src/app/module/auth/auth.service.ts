@@ -20,6 +20,7 @@ import type {
 	IRegisterPatientPayload,
 	IRequestUser,
 	IResetPasswordPayload,
+	IverifyEmailPayload,
 } from "./auth.interface";
 import {  TokenPayload } from "google-auth-library";
 import { googleClient } from "../../lib/googleAuth";
@@ -27,11 +28,14 @@ import { redisClient } from "../../lib/redis";
 import { RedisClient } from "redis";
 import { transporter } from "../../lib/nodemailer";
 import path from "path";
+import { ota } from "zod/locales";
+import { json } from "zod";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
-	const { name, password,patient:patientData } = payload;
+	const { name, password, patient: patientData } = payload;
 	const email = payload.email.trim().toLowerCase();
 
+	// 1. Check existing user
 	const isUserExists = await prisma.user.findUnique({
 		where: { email },
 	});
@@ -40,25 +44,187 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 		throw new Error("User with this email already exists");
 	}
 
+	// 2. Hash password
 	const hashedPassword = await bcrypt.hash(password, 8);
+
+	// 3. Generate OTP
+	const expirationSecond = 5 * 60;
+
+	const otpKey = `patient-registration-otp:${email}`;
+
+	const otpValue = crypto.randomInt(100000, 1000000).toString();
+
+	// 4. Save OTP in Redis
+	await redisClient.set(otpKey, otpValue, {
+		expiration: {
+			type: "EX",
+			value: expirationSecond,
+		},
+	});
+
+	// 5. Save temporary registration data in Redis
+	const patientRegistrationKey = `patient-registration-data:${email}`;
+
+	const redisUserDataPayload = {
+		name,
+		email,
+		password: hashedPassword,
+		patient: patientData,
+	};
+
+	await redisClient.set(
+		patientRegistrationKey,
+		JSON.stringify(redisUserDataPayload),
+		{
+			expiration: {
+				type: "EX",
+				value: expirationSecond,
+			},
+		},
+	);
+
+	// 6. Render email template
+	const templatePath = path.join(
+		process.cwd(),
+		"src/app/templets/registration-user-otp.ejs",
+	);
+
+	const templateData = {
+		name,
+		email,
+		otp: otpValue,
+		expirationSecond: expirationSecond / 60, // 5 minutes
+	};
+
+	const html = await ejs.renderFile(templatePath, templateData);
+
+	// 7. Send verification email
+	await transporter.sendMail({
+		from: config.email_sender,
+		to: email,
+		subject: "Email Verification",
+		html,
+	});
+
+	return {
+		message: "Registration OTP sent to your email",
+		email,
+	};
+};
+
+const verifyEmail = async (payload: IverifyEmailPayload) => {
+	const email = payload.email.trim().toLowerCase();
+	const otp = payload.otp;
+
+	// ==========================================
+	// 1. Get OTP from Redis
+	// ==========================================
+
+	const otpKey = `patient-registration-otp:${email}`;
+
+	const redisOtp = await redisClient.get(otpKey);
+
+	if (!redisOtp) {
+		throw new Error("Invalid or expired OTP");
+	}
+
+	if (redisOtp !== otp) {
+		throw new Error("OTP does not match");
+	}
+
+	// ==========================================
+	// 2. Get temporary registration data
+	// ==========================================
+
+	const patientRegistrationKey = `patient-registration-data:${email}`;
+
+	const redisPatientData = await redisClient.get(
+		patientRegistrationKey,
+	);
+
+	if (!redisPatientData) {
+		throw new Error(
+			"Registration data expired. Please register again.",
+		);
+	}
+
+	const patientPayload = JSON.parse(redisPatientData) as {
+		name: string;
+		email: string;
+		password: string;
+		patient?: {
+			contactNumber?: string;
+		};
+	};
+
+	// ==========================================
+	// 3. Double check user doesn't already exist
+	// ==========================================
+
+	const existingUser = await prisma.user.findUnique({
+		where: {
+			email,
+		},
+	});
+
+	if (existingUser) {
+		throw new Error("User with this email already exists");
+	}
+
+	// ==========================================
+	// 4. Create verified user
+	// ==========================================
 
 	const createdUser = await prisma.user.create({
 		data: {
-			name,
-			email,
-			password: hashedPassword,
+			name: patientPayload.name,
+			email: patientPayload.email,
+			password: patientPayload.password,
+
 			role: Role.PATIENT,
 			status: UserStatus.ACTIVE,
-			emailVerified: false,
+
+			// IMPORTANT
+			emailVerified: true,
+
 			patient: {
-				create: { name, email,contactNumber:patientData?.contactNumber},
+				create: {
+					name: patientPayload.name,
+					email: patientPayload.email,
+					contactNumber:
+						patientPayload.patient?.contactNumber,
+				},
 			},
 		},
-		omit: { password: true },
-		include: { patient: true },
+
+		omit: {
+			password: true,
+		},
+
+		include: {
+			patient: true,
+		},
 	});
 
+	// ==========================================
+	// 5. Delete OTP + temporary registration data
+	// ==========================================
+
+	await redisClient.del([
+		otpKey,
+		patientRegistrationKey,
+	]);
+
+	// ==========================================
+	// 6. Separate patient and user
+	// ==========================================
+
 	const { patient, ...user } = createdUser;
+
+	// ==========================================
+	// 7. Create JWT payload
+	// ==========================================
+
 	const jwtPayload = {
 		userId: user.id,
 		name: user.name,
@@ -66,11 +232,19 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 		role: user.role,
 	};
 
+	// ==========================================
+	// 8. Create access token
+	// ==========================================
+
 	const accessToken = jwtUtils.createToken(
 		jwtPayload,
 		config.jwt_access_secret,
 		config.jwt_access_expires_in as SignOptions,
 	);
+
+	// ==========================================
+	// 9. Create refresh token
+	// ==========================================
 
 	const refreshToken = jwtUtils.createToken(
 		jwtPayload,
@@ -85,6 +259,8 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 		refreshToken,
 	};
 };
+
+
 
 const loginUser = async (payload: ILoginUserPayload) => {
 	const { password } = payload;
@@ -537,6 +713,7 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 
 export const AuthService = {
 	registerPatient,
+	verifyEmail,
 	loginUser,
 	getMe,
 	refreshToken,

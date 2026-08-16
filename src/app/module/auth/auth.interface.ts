@@ -9,6 +9,14 @@ export interface IRegisterPatientPayload {
 	}
 }
 
+export interface IverifyEmailPayload {
+	
+	email: string;
+	otp:string;
+}
+
+
+
 export interface ILoginUserPayload {
 	email: string;
 	password: string;

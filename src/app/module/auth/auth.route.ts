@@ -26,6 +26,9 @@ router.post("/register",
 	validRequest.validReqeust(authErrorValidation.patientRegisterZodSchema),
 	AuthController.registerPatient
 );
+router.post("/verify-email",
+  validRequest.validReqeust(authErrorValidation.patientEmailverifieydZodSchema),AuthController.verifyPatientEmail
+)
 
 
 

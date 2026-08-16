@@ -1,5 +1,14 @@
 import z from "zod";
 
+const patientEmailverifieydZodSchema = z.object({
+ 
+  email: z
+    .string("Email must be a string")
+    .email("Please provide a valid email address"),
+otp:z.string().length(6)
+
+    
+});
 const patientRegisterZodSchema = z.object({
   name: z
     .string("Name must be a string")
@@ -100,6 +109,7 @@ const ResetPasswordzodschema = z.object({
 export const authErrorValidation = {
   patientRegisterZodSchema,
   loginZodSchema,
+  patientEmailverifieydZodSchema,
   forgetPasswordZodschema,
   ResetPasswordzodschema
 };

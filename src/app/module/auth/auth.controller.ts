@@ -24,34 +24,71 @@ const payload=req.body
 
   const result = await AuthService.registerPatient(payload);
 
-  const { accessToken, refreshToken, user, patient } = result;
+//   const { accessToken, refreshToken, user, patient } = result;
 
-  res.cookie("accessToken", accessToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "none",
-    maxAge: 1000 * 60 * 60 * 24,
-  });
+//   res.cookie("accessToken", accessToken, {
+//     httpOnly: true,
+//     secure: false,
+//     sameSite: "none",
+//     maxAge: 1000 * 60 * 60 * 24,
+//   });
 
-  res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "none",
-    maxAge: 1000 * 60 * 60 * 24 * 7,
-  });
+//   res.cookie("refreshToken", refreshToken, {
+//     httpOnly: true,
+//     secure: false,
+//     sameSite: "none",
+//     maxAge: 1000 * 60 * 60 * 24 * 7,
+//   });
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: "Patient registered successfully",
-    data: {
-      accessToken,
-      refreshToken,
-      user,
-      patient,
-    },
+    message: "verifcaiton otp send",
+    data:null
   });
 });
+const verifyPatientEmail = catchAsync(
+	async (req: Request, res: Response) => {
+		const payload = req.body;
+
+		const result = await AuthService.verifyEmail(payload);
+
+		const {
+			accessToken,
+			refreshToken,
+			user,
+			patient,
+		} = result;
+
+		// Access token cookie
+		res.cookie("accessToken", accessToken, {
+			httpOnly: true,
+			secure: false,
+			sameSite: "none",
+			maxAge: 1000 * 60 * 60 * 24,
+		});
+
+		// Refresh token cookie
+		res.cookie("refreshToken", refreshToken, {
+			httpOnly: true,
+			secure: false,
+			sameSite: "none",
+			maxAge: 1000 * 60 * 60 * 24 * 7,
+		});
+
+		sendResponse(res, {
+			statusCode: httpStatus.CREATED,
+			success: true,
+			message: "Email verified and registration completed successfully",
+			data: {
+				accessToken,
+				refreshToken,
+				user,
+				patient,
+			},
+		});
+	},
+);
 
 const loginUser = catchAsync(async (req: Request, res: Response) => {
 	const payload = req.body;
@@ -193,6 +230,7 @@ const resetPassword= catchAsync(async (req: Request, res: Response) => {
 
 export const AuthController = {
 	registerPatient,
+	verifyPatientEmail,
 	loginUser,
 	getMe,
 	refreshToken,
