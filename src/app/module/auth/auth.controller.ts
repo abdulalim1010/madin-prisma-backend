@@ -5,7 +5,6 @@ import { sendResponse } from "../../utils/sendResponse";
 import type { IRequestUser } from "./auth.interface";
 import { AuthService } from "./auth.service";
 import z from "zod";
-import { authErrorValidation } from "./auth.erorValidation";
 
 
 
@@ -47,6 +46,9 @@ const payload=req.body
     data:null
   });
 });
+
+
+
 const verifyPatientEmail = catchAsync(
 	async (req: Request, res: Response) => {
 		const payload = req.body;
