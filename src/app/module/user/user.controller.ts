@@ -13,12 +13,12 @@ const uploadProfileImage=catchAsync(async(req:Request,res:Response)=>{
 
 console.log(req.file,"req.file")
 
-await UserSerivces.uploadProfileImage(req.file?.buffer,userId!)
+const result= await UserSerivces.uploadProfileImage(req.file?.buffer,userId!)
     sendResponse(res,{
         statusCode:httpStatus.OK,
         success:true,
         message:"New token successfully",
-        data:null
+        data:result
     })
 })
 export const userController={

@@ -36,9 +36,20 @@ cloudinary.uploader.upload_stream(
     }
  ).end(buffer)
 
+ const user=await prisma.user.findUnique({
+    where:{
+        id:userId
+    },
+    
+        omit:{
+            password:true
+        }
+    
+ })
 
 
 
+return user
 
 
 }
