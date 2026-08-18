@@ -1,58 +1,54 @@
-import { cloudinary } from "../../lib/cloudinary"
+import { cloudinary } from "../../lib/cloudinary";
 import { prisma } from "../../lib/prisma";
+import { UploadApiResponse } from "cloudinary";
 
-const uploadProfileImage=async(buffer:Buffer,userId:string)=>{
+const uploadProfileImage = async (
+  buffer: Buffer,
+  userId: string,
+) => {
+  // Cloudinary upload
+  const cloudinaryResult = await new Promise<UploadApiResponse>(
+    (resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            resource_type: "auto",
+          },
+          (error, result) => {
+            if (error) {
+              return reject(error);
+            }
 
+            if (!result) {
+              return reject(
+                new Error("Cloudinary upload failed"),
+              );
+            }
 
-
-
-cloudinary.uploader.upload_stream(
-
-    {
-        resource_type:"auto"
+            resolve(result);
+          },
+        )
+        .end(buffer);
     },
-     async(error,result)=>{
-       if(error){
-        console.log(error);
-        throw new Error(error.message);
-        
-       }
+  );
 
-       console.log(result,"result")
-
-       const updatedUser=await prisma.user.update({
-        where:{
-            id:userId,
-
-        },
-        data:{imageUrl:result?.secure_url,
-            imagePublicId:result?.public_id
-
-        }
-
-       })
-       console.log(updatedUser);
-    //    return result
-    }
- ).end(buffer)
-
- const user=await prisma.user.findUnique({
-    where:{
-        id:userId
+  // Update user in database
+  const updatedUser = await prisma.user.update({
+    where: {
+      id: userId,
     },
-    
-        omit:{
-            password:true
-        }
-    
- })
+    data: {
+      imageUrl: cloudinaryResult.secure_url,
+      imagePublicId: cloudinaryResult.public_id,
+    },
+    omit: {
+      password: true,
+    },
+  });
 
+  return updatedUser;
+};
 
-
-return user
-
-
-}
-export const UserSerivces={
-    uploadProfileImage
-}
+export const UserSerivces = {
+  uploadProfileImage,
+};
