@@ -11,11 +11,23 @@ const RefreshTOkenKey="bkash:refreshToken"
 
 
 let bkashIdToken=await redisClient.get(IdTokenKey)
+const bkashIdTokenTTL=await redisClient.ttl(IdTokenKey)
+
+const bkashRefreshToken=await redisClient.get(RefreshTOkenKey)
+const bkashRefreshTokenTTL=await redisClient.ttl(RefreshTOkenKey)
+console.log({
+    bkashIdToken,
+    bkashIdTokenTTL,
+    bkashRefreshToken,
+    bkashRefreshTokenTTL
+})
 
 
-let bkashRefreshToken=await redisClient.get(RefreshTOkenKey)
 
-if(!bkashIdToken && bkashRefreshToken){
+
+
+if((bkashIdTokenTTL <=600||!bkashIdToken)
+     && bkashRefreshToken && bkashRefreshTokenTTL >600){
 
      const refreshTOkenResponse=await fetch(`${config.bkash_base_url}/tokenized/checkout/token/refresh`,
         {
@@ -44,7 +56,23 @@ body:JSON.stringify(
 
 
     const bkashRefreshTokenResult=await refreshTOkenResponse.json()
-    bkashIdToken=bkashRefreshTokenResult.id_token
+
+  bkashIdToken=bkashRefreshTokenResult.id_token as string
+    await redisClient.set(IdTokenKey,bkashIdToken,{
+
+
+
+
+        expiration:{
+            type:"EX",
+            value:60*60
+        }
+    })
+    if(!refreshTOkenResponse.ok){
+    throw new Error("Bkash access token grant faild");
+    
+}
+  
     return bkashIdToken
 
 }
