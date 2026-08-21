@@ -15,12 +15,12 @@ const bkashIdTokenTTL=await redisClient.ttl(IdTokenKey)
 
 const bkashRefreshToken=await redisClient.get(RefreshTOkenKey)
 const bkashRefreshTokenTTL=await redisClient.ttl(RefreshTOkenKey)
-console.log({
-    bkashIdToken,
-    bkashIdTokenTTL,
-    bkashRefreshToken,
-    bkashRefreshTokenTTL
-})
+// console.log({
+//     bkashIdToken,
+//     bkashIdTokenTTL,
+//     bkashRefreshToken,
+//     bkashRefreshTokenTTL
+// })
 
 
 
@@ -57,6 +57,8 @@ body:JSON.stringify(
 
     const bkashRefreshTokenResult=await refreshTOkenResponse.json()
 
+
+    
   bkashIdToken=bkashRefreshTokenResult.id_token as string
     await redisClient.set(IdTokenKey,bkashIdToken,{
 
@@ -112,6 +114,14 @@ if(!response.ok){
     
 }
   const result=await response.json();
+  console.log("========== BKASH TOKEN GRANT ==========");
+console.log("HTTP Status:", response.status);
+console.log("OK:", response.ok);
+console.log("Token exists:", !!result.id_token);
+console.log("Refresh token exists:", !!result.refresh_token);
+console.log("Status code:", result.statusCode);
+console.log("Status message:", result.statusMessage);
+console.log("=======================================");
 
  await redisClient.set(IdTokenKey,result.id_token,{
     expiration:{
