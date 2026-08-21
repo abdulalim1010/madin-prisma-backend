@@ -2,18 +2,16 @@ import { Router } from "express";
 import { AppointmentController } from "./appointment.controller";
 import { auth } from "../../middleware/checkAuth";
 
-
 const router = Router();
+
 
 router.post(
   "/book-appointment",
- auth(),
+  auth(),
   AppointmentController.bookAppointment,
 );
 
-router.get(
-  "/book-appointment/payment/callback",
-  AppointmentController.bookAppointmentCallback
-);
+//book appointment callback url
+router.get("/book-appointment/payment/callback", AppointmentController.bookAppointmentCallback )
 
-export const AppointmentRoutes = router;
+export const AppointementRoutes = router;
