@@ -8,11 +8,16 @@ const router = Router();
 
 router.post(
   "/book-appointment",
-  auth(),
-  AppointmentController.bookAppointment,
+  auth(Role.PATIENT),
+  AppointmentController.bookAppointment
 );
 
-//book appointment callback url
-router.get("/book-appointment/payment/callback",auth(Role.PATIENT),AppointmentController.bookAppointmentCallback )
+// bKash callback URL
+router.get(
+  "/book-appointment/payment/callback",
+  AppointmentController.bookAppointmentCallback
+);
+
+
 
 export const AppointementRoutes = router;
