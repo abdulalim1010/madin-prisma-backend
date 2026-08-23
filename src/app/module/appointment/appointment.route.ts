@@ -11,6 +11,11 @@ router.post(
   auth(Role.PATIENT),
   AppointmentController.bookAppointment
 );
+router.post(
+  "/pay-appointment",
+  auth(Role.PATIENT),
+  AppointmentController.payAppointment
+);
 
 // bKash callback URL
 router.get(

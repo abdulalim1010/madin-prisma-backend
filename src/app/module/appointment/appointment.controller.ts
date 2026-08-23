@@ -12,10 +12,32 @@ const bookAppointment = catchAsync(async (req: Request, res: Response) => {
     sendResponse(res, {
         statusCode: httpStatus.OK,
         success: true,
-        message: "User profile fetched successfully",
+        message:  "Appointemtn payment initiate successfully",
         data: result,
     });
 });
+
+
+const payAppointment = catchAsync(async (req: Request, res: Response) => {
+
+    const payload=req.body;
+    const user =req.user!;
+    const result = await AppointmentServices.payAppointment(payload,user)
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "Appointemtn payment initiate successfully",
+        data: result,
+    });
+});
+
+
+
+
+
+
+
+
 const bookAppointmentCallback = catchAsync(async (req: Request, res: Response) => {
 
     const { redirectUrl} =  await AppointmentServices.bookAppointmentCallback(req.query);
@@ -31,7 +53,27 @@ const bookAppointmentCallback = catchAsync(async (req: Request, res: Response) =
     // });
 });
 
+
+
+
+const cancelAppointment = catchAsync(async (req: Request, res: Response) => {
+
+    const payload=req.body;
+    const user =req.user!;
+    const result = await AppointmentServices.cancelAppointment(payload,user)
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "Appointemtn payment initiate successfully",
+        data: result,
+    });
+});
+
+
+
 export const AppointmentController = {
     bookAppointment,
-    bookAppointmentCallback
+    bookAppointmentCallback,
+    payAppointment,
+    cancelAppointment
 }
