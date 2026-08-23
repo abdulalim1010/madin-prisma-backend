@@ -4,6 +4,10 @@ import { getBkashIdToken } from "../../lib/bkash";
 import { prisma } from "../../lib/prisma";
 import { RequestUser } from "../../middleware/checkAuth";
 
+import crypto from "crypto"
+
+
+
 const bookAppointment = async (payload:any,user:RequestUser) => {
 
 
@@ -346,7 +350,11 @@ const bkashIdToken = await getBkashIdToken()
         throw new Error("No Bkash Access Token Found!")
     }
     
-    const bkashRefundPaymentResponse = await fetch(`${config.bkash_base_url}/v2/tokenized-checkout/refund/payment/transaction`, {
+
+
+
+    
+    const bkashRefundPaymentResponse = await fetch(`${config.bkash_base_url}/tokenized/checkout/payment/refund`, {
         method : "POST",
         headers : {
             "Content-Type": "application/json",
@@ -356,8 +364,8 @@ const bkashIdToken = await getBkashIdToken()
 
         },
         body: JSON.stringify({
-      paymentId:existingApppointment.payment?.bkashPaymentId,
-    trxId: existingApppointment.payment?.bkashTrxId,
+      paymentID:existingApppointment.payment?.bkashPaymentId,
+    trxID: existingApppointment.payment?.bkashTrxId,
     refundAmount:existingApppointment.payment?.refundAmount,
     sku:"appointment canclletion",
     reason: "user cancel patient" // apppointment id
@@ -376,17 +384,19 @@ const bkashIdToken = await getBkashIdToken()
 console.log(bkashRefundPaymentResult)
 
 
-   const updatedPayment=await tx.payment.update({
-    where:{
-        appointmentId:existingApppointment.id
+  const updatedPayment = await tx.payment.update({
+    where: {
+        appointmentId: existingApppointment.id,
     },
-    data:{
-        refundTrxId:bkashRefundPaymentResult.refundTrxId,
-        refundedAt:bkashRefundPaymentResult.completedTime,
-        refundAmount:bkashRefundPaymentResult.refundAmount,
-        refundReson:bkashRefundPaymentResult.reason
-    }
-   })
+    data: {
+        refundTrxID: bkashRefundPaymentResult.refundTrxID,
+        refundedAt: bkashRefundPaymentResult.completedTime,
+        refundAmount: bkashRefundPaymentResult.amount, // top-level, already a string
+        refundReson: "patient cancelled appointment",
+        status: PaymentStatus.REFUNDED,
+        gatewayResponse: bkashRefundPaymentResult,
+    },
+});
 
 
    return {
