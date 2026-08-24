@@ -94,6 +94,20 @@ export const seedTesterDoctor = async () => {
         status: UserStatus.ACTIVE,
         needPasswordChange: false,
         emailVerified: true,
+        doctor:{
+          create:{
+            email,
+            name,
+            experienceYears:5,
+            licenceNumber:"gjlksdldfg",
+            qulaification:"MMBS",
+            specilization:"Neurology"
+  
+
+
+          }
+        }
+        
       },
     });
 
