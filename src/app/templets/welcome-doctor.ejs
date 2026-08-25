@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doctor Application Received</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 15px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background-color:#0f766e;padding:35px 25px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:28px;">PH Madin Healthcare</h1>
+              <p style="margin:10px 0 0;color:#d1fae5;font-size:14px;">Doctor Application</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 35px;">
+              <h2 style="margin:0 0 20px;color:#1f2937;font-size:25px;">Hello, Dr. <%= name %></h2>
+              <p style="margin:0 0 18px;color:#4b5563;font-size:15px;line-height:1.7;">
+                Your email has been verified and your doctor application has been submitted successfully.
+              </p>
+              <p style="margin:0 0 25px;color:#4b5563;font-size:15px;line-height:1.7;">
+                Your application status is currently <strong>PENDING</strong>. Our admin team will review your documents and notify you by email once a decision is made.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdfa;border:1px solid #ccfbf1;border-radius:10px;margin:25px 0;">
+                <tr>
+                  <td style="padding:22px;">
+                    <p style="margin:8px 0;color:#374151;font-size:14px;"><strong>Name:</strong> <%= name %></p>
+                    <p style="margin:8px 0;color:#374151;font-size:14px;"><strong>Email:</strong> <%= email %></p>
+                    <p style="margin:8px 0;color:#374151;font-size:14px;"><strong>Status:</strong> PENDING</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.6;">
+                You do not need to take any further action right now.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc;padding:25px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#9ca3af;font-size:12px;">This is an automated email. Please do not reply.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
