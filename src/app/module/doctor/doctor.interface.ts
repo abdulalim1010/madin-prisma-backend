@@ -55,3 +55,14 @@ export interface ISafeDoctorWithUser {
   verificationstatus: DoctorsVerificationStatus;
   [key: string]: unknown;
 }
+
+export interface IGetAllDoctorsQuery {
+  search?: string;
+  specialization?: string;
+  minExperience?: number;
+  maxExperience?: number;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}

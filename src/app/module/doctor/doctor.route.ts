@@ -31,4 +31,14 @@ router.patch(
   DoctorAsApplyController.rejectDoctor,
 );
 
+
+//all DoctorA
+
+
+
+router.get(
+  "/",
+  DoctorAsApplyController.getAllDoctors,
+);
+
 export const DoctorRoutes = router;

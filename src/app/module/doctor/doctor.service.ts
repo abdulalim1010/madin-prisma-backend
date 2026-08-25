@@ -4,260 +4,154 @@ import crypto from "crypto";
 import ejs from "ejs";
 import path from "path";
 
-import { Prisma } from "../../../generated/prisma/client";
 import config from "../../config";
 import { cloudinary } from "../../lib/cloudinary";
-import { transporter } from "../../lib/nodemailer";
 import { prisma } from "../../lib/prisma";
 import { redisClient } from "../../lib/redis";
+import { transporter } from "../../lib/nodemailer";
+
 import {
   IApplyAsDoctorPayload,
-  IStoredDoctorApplication,
-  IUploadedFile,
+  IGetAllDoctorsQuery,
   IVerifyDoctorEmailPayload,
 } from "./doctor.interface";
+import { Prisma } from "../../../generated/prisma/client";
 
-const OTP_EXPIRATION_SECONDS = 10 * 60;
+const OTP_EXPIRATION_SECONDS = 60 * 10; // 10 minutes
 
 const buildOtpKey = (email: string) => `doctor:otp:${email}`;
-const buildApplicationKey = (email: string) => `doctor:application:${email}`;
 
-const mailFrom = `"PH Madin Healthcare" <${config.email_sender || config.smtp_user}>`;
-
-const uploadToCloudinary = (
-  file: Express.Multer.File,
-  folder: string,
-): Promise<UploadApiResponse> => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader
-      .upload_stream({ resource_type: "auto", folder }, (error, result) => {
-        if (error) return reject(error);
-        if (!result) return reject(new Error("File upload failed"));
-        resolve(result);
-      })
-      .end(file.buffer);
-  });
-};
-
-const renderAndSendMail = async (options: {
-  templateFile: string;
-  templateData: Record<string, unknown>;
-  to: string;
-  subject: string;
-}) => {
-  const templatePath = path.join(
-    process.cwd(),
-    "src/app/templets",
-    options.templateFile,
-  );
-  const html = await ejs.renderFile(templatePath, options.templateData);
-  await transporter.sendMail({
-    from: mailFrom,
-    to: options.to,
-    subject: options.subject,
-    html,
-  });
-};
+// ==========================================================
+// APPLY AS DOCTOR
+// ==========================================================
 
 const applyAsDoctor = async (
   payload: IApplyAsDoctorPayload,
   resume: Express.Multer.File | null,
   additionalFiles: Express.Multer.File[],
 ) => {
-  if (!payload?.user || !payload?.doctor) {
-    throw new Error(
-      "Invalid payload. Send JSON in the data field with user and doctor objects.",
-    );
-  }
-
+  // ========================================================
+  // 1. Validate Resume
+  // ========================================================
   if (!resume) {
     throw new Error("Resume file is required");
   }
 
-  const userEmail = payload.user.email.trim().toLowerCase();
-  const doctorEmail = payload.doctor.email.trim().toLowerCase();
-
+  // ========================================================
+  // 2. Check Existing User
+  // ========================================================
   const existingUser = await prisma.user.findUnique({
-    where: { email: userEmail },
+    where: { email: payload.user.email },
   });
 
   if (existingUser) {
     throw new Error("A user already exists with this email");
   }
 
-  const existingDoctorEmail = await prisma.doctor.findUnique({
-    where: { email: doctorEmail },
-  });
-
-  if (existingDoctorEmail) {
-    throw new Error("A doctor already exists with this email");
-  }
-
-  const existingLicence = await prisma.doctor.findUnique({
-    where: { licenceNumber: payload.doctor.licenceNumber },
-  });
-
-  if (existingLicence) {
-    throw new Error("A doctor already exists with this licence number");
-  }
-
+  // ========================================================
+  // 3. Hash Password
+  // ========================================================
   const hashedPassword = await bcrypt.hash(
     payload.user.password,
     Number(config.bcrypt_salt_rounds),
   );
 
+  // ========================================================
+  // 4. Upload Resume to Cloudinary
+  // ========================================================
   let resumeUploadResult: UploadApiResponse;
   try {
-    resumeUploadResult = await uploadToCloudinary(resume, "doctor/resumes");
-  } catch {
+    resumeUploadResult = await new Promise<UploadApiResponse>(
+      (resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            { resource_type: "auto", folder: "doctor/resumes" },
+            (error, result) => {
+              if (error) return reject(error);
+              if (!result)
+                return reject(new Error("Resume upload failed"));
+              resolve(result);
+            },
+          )
+          .end(resume.buffer);
+      },
+    );
+  } catch (error) {
     throw new Error("Failed to upload resume. Please try again.");
   }
 
-  let additionalUploads: UploadApiResponse[] = [];
+  // ========================================================
+  // 5. Upload Additional Files
+  // ========================================================
+  let additionalFilesUpload: UploadApiResponse[] = [];
   try {
-    additionalUploads = await Promise.all(
-      additionalFiles.map((file) =>
-        uploadToCloudinary(file, "doctor/additional-files"),
-      ),
+    additionalFilesUpload = await Promise.all(
+      additionalFiles.map((file) => {
+        return new Promise<UploadApiResponse>((resolve, reject) => {
+          cloudinary.uploader
+            .upload_stream(
+              { resource_type: "auto", folder: "doctor/additional-files" },
+              (error, result) => {
+                if (error) return reject(error);
+                if (!result)
+                  return reject(
+                    new Error("Additional file upload failed"),
+                  );
+                resolve(result);
+              },
+            )
+            .end(file.buffer);
+        });
+      }),
     );
-  } catch {
+  } catch (error) {
     throw new Error("Failed to upload additional files. Please try again.");
   }
 
-  const storedApplication: IStoredDoctorApplication = {
-    user: {
-      name: payload.user.name,
-      email: userEmail,
-      password: hashedPassword,
-    },
-    doctor: {
-      name: payload.doctor.name,
-      email: doctorEmail,
-      adress: payload.doctor.adress,
-      specilization: payload.doctor.specilization,
-      licenceNumber: payload.doctor.licenceNumber,
-      qulaification: payload.doctor.qulaification,
-      experienceYears: Number(payload.doctor.experienceYears),
-      bio: payload.doctor.bio,
-      consultatinFee: payload.doctor.consultatinFee,
-      contactNumber: payload.doctor.contactNumber,
-    },
-    resume: {
-      url: resumeUploadResult.secure_url,
-      publicId: resumeUploadResult.public_id,
-    },
-    additionalFiles: additionalUploads.map((file) => ({
-      url: file.secure_url,
-      publicId: file.public_id,
-    })),
-  };
-
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  const otpKey = buildOtpKey(userEmail);
-  const applicationKey = buildApplicationKey(userEmail);
-
-  await redisClient.set(otpKey, otp, {
-    expiration: { type: "EX", value: OTP_EXPIRATION_SECONDS },
-  });
-
-  await redisClient.set(applicationKey, JSON.stringify(storedApplication), {
-    expiration: { type: "EX", value: OTP_EXPIRATION_SECONDS },
-  });
-
-  console.log("Doctor OTP:", otp);
-
+  // ========================================================
+  // 6. Create User + Doctor Together (Prisma nested write)
+  // ========================================================
+let doctorApplication: DoctorApplicationResult;
   try {
-    await renderAndSendMail({
-      templateFile: "verify-doctor-email.ejs",
-      templateData: {
-        name: payload.user.name,
-        otp,
-        expiresInMinutes: OTP_EXPIRATION_SECONDS / 60,
-      },
-      to: userEmail,
-      subject: "Verify Your Doctor Account - PH Madin Healthcare",
-    });
-  } catch (error) {
-    console.error("Failed to send OTP email:", error);
-    throw new Error("Failed to send verification email. Please try again.");
-  }
-
-  return {
-    email: userEmail,
-    message: "OTP sent to your email. Verify to submit your application.",
-  };
-};
-
-const verifyDoctorEmail = async (payload: IVerifyDoctorEmailPayload) => {
-  const email = payload.email.trim().toLowerCase();
-  const otp = payload.otp;
-
-  const otpKey = buildOtpKey(email);
-  const applicationKey = buildApplicationKey(email);
-
-  const storedOtp = await redisClient.get(otpKey);
-
-  if (!storedOtp) {
-    throw new Error("OTP expired or does not exist. Please apply again.");
-  }
-
-  if (storedOtp !== otp) {
-    throw new Error("Invalid OTP");
-  }
-
-  const storedApplicationRaw = await redisClient.get(applicationKey);
-
-  if (!storedApplicationRaw) {
-    throw new Error("Application data expired. Please apply again.");
-  }
-
-  const storedApplication = JSON.parse(
-    storedApplicationRaw,
-  ) as IStoredDoctorApplication;
-
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
-
-  if (existingUser) {
-    throw new Error("A user already exists with this email");
-  }
-
-  let createdUser;
-  try {
-    createdUser = await prisma.user.create({
+    doctorApplication = await prisma.user.create({
       data: {
-        name: storedApplication.user.name,
-        email: storedApplication.user.email,
-        password: storedApplication.user.password,
+        name: payload.user.name,
+        email: payload.user.email,
+        password: hashedPassword,
         role: "DOCTOR",
         authProvider: "CREDENTIAL",
         status: "ACTIVE",
-        emailVerified: true,
-        needPasswordChange: false,
+        emailVerified: false,
+        needPasswordChange: true,
+
         doctor: {
           create: {
-            name: storedApplication.doctor.name,
-            email: storedApplication.doctor.email,
-            adress: storedApplication.doctor.adress,
-            specilization: storedApplication.doctor.specilization,
-            licenceNumber: storedApplication.doctor.licenceNumber,
-            qulaification: storedApplication.doctor.qulaification,
-            experienceYears: Number(storedApplication.doctor.experienceYears),
-            bio: storedApplication.doctor.bio,
-            consultatinFee: storedApplication.doctor.consultatinFee
-              ? new Prisma.Decimal(storedApplication.doctor.consultatinFee)
+            name: payload.doctor.name,
+            email: payload.doctor.email,
+            adress: payload.doctor.adress,
+            specilization: payload.doctor.specilization,
+            licenceNumber: payload.doctor.licenceNumber,
+            qulaification: payload.doctor.qulaification,
+            experienceYears: Number(payload.doctor.experienceYears),
+            bio: payload.doctor.bio,
+            consultatinFee: payload.doctor.consultatinFee
+              ? new Prisma.Decimal(payload.doctor.consultatinFee)
               : undefined,
-            contactNumber: storedApplication.doctor.contactNumber,
+            contactNumber: payload.doctor.contactNumber,
+
             verificationstatus: "PENDING",
-            resume: storedApplication.resume.url,
-            resumePublicId: storedApplication.resume.publicId,
-            additionalFiles: storedApplication.additionalFiles as IUploadedFile[],
+
+            resume: resumeUploadResult.secure_url,
+            resumePublicId: resumeUploadResult.public_id,
+
+            additionalFiles: additionalFilesUpload.map((file) => ({
+              url: file.secure_url,
+              publicId: file.public_id,
+            })),
           },
         },
       },
       include: { doctor: true },
-      omit: { password: true },
     });
   } catch (error) {
     if (
@@ -272,24 +166,136 @@ const verifyDoctorEmail = async (payload: IVerifyDoctorEmailPayload) => {
     throw error;
   }
 
-  await redisClient.del([otpKey, applicationKey]);
+  // ========================================================
+  // 7. Generate OTP
+  // ========================================================
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const otpKey = buildOtpKey(payload.user.email);
+
+  // ========================================================
+  // 8. Store ONLY the OTP in Redis
+  // ========================================================
+  await redisClient.set(otpKey, otp, {
+    expiration: { type: "EX", value: OTP_EXPIRATION_SECONDS },
+  });
+
+  console.log("Doctor OTP:", otp);
+
+  // ========================================================
+  // 9. Render EJS Email Template & Send
+  // ========================================================
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templets/verify-doctor-email.ejs",
+  );
 
   try {
-    await renderAndSendMail({
-      templateFile: "welcome-doctor.ejs",
-      templateData: {
-        name: createdUser.name,
-        email: createdUser.email,
-      },
-      to: createdUser.email,
-      subject: "Application Received - Pending Admin Review",
+    const emailHtml = await ejs.renderFile(templatePath, {
+      name: payload.user.name,
+      otp,
+      expiresInMinutes: 10,
+    });
+
+    await transporter.sendMail({
+      from: `"PH Madin Healthcare" <${config.smtp_user}>`,
+      to: payload.user.email,
+      subject: "Verify Your Doctor Account - PH Madin Healthcare",
+      html: emailHtml,
     });
   } catch (error) {
-    console.error("Failed to send doctor welcome email:", error);
+    // User + Doctor already exist in DB — don't fail the whole request,
+    // just let them know the email didn't go out.
+    console.error("Failed to send OTP email:", error);
+    throw new Error(
+      "Application created, but failed to send verification email. Please contact support or request a new OTP.",
+    );
   }
 
-  return createdUser;
+  console.log(`Doctor verification OTP sent to ${payload.user.email}`);
+
+  // ========================================================
+  // 10. Return Safe Response
+  // ========================================================
+  const { password, ...userWithoutPassword } = doctorApplication;
+
+  return userWithoutPassword;
 };
+
+// ==========================================================
+// VERIFY DOCTOR EMAIL (only updates emailVerified)
+// ==========================================================
+
+const verifyDoctorEmail = async (payload: IVerifyDoctorEmailPayload) => {
+  const { email, otp } = payload;
+
+  // ========================================================
+  // 1. Find User
+  // ========================================================
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { doctor: true },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  // ========================================================
+  // 2. Ensure User Is a Doctor
+  // ========================================================
+  if (user.role !== "DOCTOR" || !user.doctor) {
+    throw new Error("This account is not a doctor account");
+  }
+
+  // ========================================================
+  // 3. Check Already Verified
+  // ========================================================
+  if (user.emailVerified) {
+    throw new Error("Email is already verified");
+  }
+
+  // ========================================================
+  // 4. Get OTP From Redis
+  // ========================================================
+  const otpKey = buildOtpKey(email);
+  const storedOtp = await redisClient.get(otpKey);
+
+  if (!storedOtp) {
+    throw new Error("OTP expired or does not exist. Please request a new one.");
+  }
+
+  // ========================================================
+  // 5. Compare OTP
+  // ========================================================
+  if (storedOtp !== otp) {
+    throw new Error("Invalid OTP");
+  }
+
+  // ========================================================
+  // 6. Update ONLY emailVerified
+  // ========================================================
+  const updatedUser = await prisma.user.update({
+    where: { email },
+    data: { emailVerified: true },
+    include: { doctor: true },
+  });
+
+  // ========================================================
+  // 7. Delete OTP From Redis
+  // ========================================================
+  await redisClient.del(otpKey);
+
+  // ========================================================
+  // 8. Return Safe Response
+  // ========================================================
+  const { password, ...userWithoutPassword } = updatedUser;
+
+  return userWithoutPassword;
+};
+
+// ==========================================================
+// APPROVE DOCTOR (Admin action)
+// ==========================================================
 
 const approveDoctor = async (doctorId: string, adminId: string) => {
   const doctor = await prisma.doctor.findUnique({
@@ -321,23 +327,33 @@ const approveDoctor = async (doctorId: string, adminId: string) => {
   });
 
   try {
-    await renderAndSendMail({
-      templateFile: "doctor-approved.ejs",
-      templateData: {
-        name: updatedDoctor.user.name,
-        loginUrl: `${config.frontend_url}/login`,
-      },
+    const templatePath = path.join(
+      process.cwd(),
+      "src/app/templets/doctor-approved.ejs",
+    );
+
+    const emailHtml = await ejs.renderFile(templatePath, {
+      name: updatedDoctor.user.name,
+    });
+
+    await transporter.sendMail({
+      from: `"PH Madin Healthcare" <${config.smtp_user}>`,
       to: updatedDoctor.user.email,
       subject: "Your Doctor Application Has Been Approved",
+      html: emailHtml,
     });
   } catch (error) {
     console.error("Failed to send approval email:", error);
   }
 
-  const { password: _password, ...userWithoutPassword } = updatedDoctor.user;
+  const { password, ...userWithoutPassword } = updatedDoctor.user;
 
   return { ...updatedDoctor, user: userWithoutPassword };
 };
+
+// ==========================================================
+// REJECT DOCTOR (Admin action)
+// ==========================================================
 
 const rejectDoctor = async (
   doctorId: string,
@@ -373,27 +389,236 @@ const rejectDoctor = async (
   });
 
   try {
-    await renderAndSendMail({
-      templateFile: "doctor-rejected.ejs",
-      templateData: {
-        name: updatedDoctor.user.name,
-        reason: updatedDoctor.rejectionReson,
-      },
+    const templatePath = path.join(
+      process.cwd(),
+      "src/app/templets/doctor-rejected.ejs",
+    );
+
+    const emailHtml = await ejs.renderFile(templatePath, {
+      name: updatedDoctor.user.name,
+      reason: updatedDoctor.rejectionReson,
+    });
+
+    await transporter.sendMail({
+      from: `"PH Madin Healthcare" <${config.smtp_user}>`,
       to: updatedDoctor.user.email,
       subject: "Update on Your Doctor Application",
+      html: emailHtml,
     });
   } catch (error) {
     console.error("Failed to send rejection email:", error);
   }
 
-  const { password: _password, ...userWithoutPassword } = updatedDoctor.user;
+  const { password, ...userWithoutPassword } = updatedDoctor.user;
 
   return { ...updatedDoctor, user: userWithoutPassword };
 };
+
+// ==========================================================
+// EXPORT
+// ==========================================================
+// sorting 
+
+
+
+
+const getAllDoctors = async (
+  query: IGetAllDoctorsQuery,
+) => {
+  // ==========================================
+  // 1. Query Parameters
+  // ==========================================
+
+  const search = query.search || "";
+
+  const specialization = query.specialization;
+
+  const minExperience = query.minExperience
+    ? Number(query.minExperience)
+    : undefined;
+
+  const maxExperience = query.maxExperience
+    ? Number(query.maxExperience)
+    : undefined;
+
+  const page = query.page
+    ? Number(query.page)
+    : 1;
+
+  const limit = query.limit
+    ? Number(query.limit)
+    : 10;
+
+  const skip = (page - 1) * limit;
+
+  const sortBy = query.sortBy || "createdAt";
+
+  const sortOrder =
+    query.sortOrder === "asc"
+      ? "asc"
+      : "desc";
+
+  // ==========================================
+  // 2. Search + Filter
+  // ==========================================
+
+  const andConditions: Prisma.DoctorWhereInput[] = [];
+
+  // Search
+  if (search) {
+    andConditions.push({
+      OR: [
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          email: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          specilization: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          licenceNumber: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ],
+    });
+  }
+
+  // Specialization filter
+  if (specialization) {
+    andConditions.push({
+      specilization: {
+        equals: specialization,
+        mode: "insensitive",
+      },
+    });
+  }
+
+  // Minimum experience
+  if (minExperience !== undefined) {
+    andConditions.push({
+      experienceYears: {
+        gte: minExperience,
+      },
+    });
+  }
+
+  // Maximum experience
+  if (maxExperience !== undefined) {
+    andConditions.push({
+      experienceYears: {
+        lte: maxExperience,
+      },
+    });
+  }
+
+  // Only active/non-deleted doctors
+  andConditions.push({
+    isDeleted: false,
+  });
+
+  // ==========================================
+  // 3. Where Condition
+  // ==========================================
+
+  const whereCondition: Prisma.DoctorWhereInput =
+    andConditions.length > 0
+      ? {
+          AND: andConditions,
+        }
+      : {};
+
+  // ==========================================
+  // 4. Sorting
+  // ==========================================
+
+  const allowedSortFields = [
+    "name",
+    "experienceYears",
+    "consultatinFee",
+    "createdAt",
+  ];
+
+  const finalSortBy =
+    allowedSortFields.includes(sortBy)
+      ? sortBy
+      : "createdAt";
+
+  // ==========================================
+  // 5. Get Doctors + Total Count
+  // ==========================================
+
+  const [doctors, total] =
+    await Promise.all([
+      prisma.doctor.findMany({
+        where: whereCondition,
+
+        skip,
+
+        take: limit,
+
+        orderBy: {
+          [finalSortBy]: sortOrder,
+        },
+
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              imageUrl: true,
+              emailVerified: true,
+            },
+          },
+        },
+      }),
+
+      prisma.doctor.count({
+        where: whereCondition,
+      }),
+    ]);
+
+  // ==========================================
+  // 6. Pagination Meta
+  // ==========================================
+
+  const totalPage = Math.ceil(
+    total / limit,
+  );
+
+  return {
+    doctors,
+
+    meta: {
+      page,
+      limit,
+      total,
+      totalPage,
+    },
+  };
+};
+
+
+
+
 
 export const DoctorServices = {
   applyAsDoctor,
   verifyDoctorEmail,
   approveDoctor,
   rejectDoctor,
+  getAllDoctors
 };

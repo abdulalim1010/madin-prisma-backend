@@ -4,11 +4,21 @@ import { transporter } from "./app/lib/nodemailer";
 import { prisma } from "./app/lib/prisma";
 import { redisClient } from "./app/lib/redis";
 import { seedSuperAdmin, seedTesterAdmin, seedTesterDoctor } from "./app/utils/seed";
+import cron from 'node-cron';
+
+
 
 const PORT = config.port;
 
 const main = async () => {
 	try {
+
+
+
+
+
+
+
 		await prisma.$connect();
 		console.log("Connected to the database successfully.");
 
@@ -23,6 +33,15 @@ const main = async () => {
 		await seedTesterDoctor();
 		await seedTesterAdmin();
 		
+cron.schedule(' * * * * *', () => {
+  console.log('running a task every minute');
+});
+
+
+
+
+
+
 		app.listen(PORT, () => {
 			console.log(`Server is running on port ${PORT}`);
 		});
