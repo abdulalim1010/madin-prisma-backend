@@ -43,3 +43,8 @@ enum DoctorsVerificationStatus {
   APPROVED
   REJECTED
 }
+
+enum ScheduleSlots {
+  DRAFT
+  PUBLISHED
+}

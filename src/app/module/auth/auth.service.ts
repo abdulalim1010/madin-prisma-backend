@@ -31,6 +31,10 @@ import path from "path";
 import { ota } from "zod/locales";
 import { json } from "zod";
 
+
+import httpStatus from "http-status"
+import { AppError } from "../../utils/appError";
+
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password, patient: patientData } = payload;
 	const email = payload.email.trim().toLowerCase();
@@ -301,7 +305,8 @@ const loginUser = async (payload: ILoginUserPayload) => {
 	});
 
 	if (!user) {
-		throw new Error("User not found");
+		throw new AppError(httpStatus.NOT_FOUND,"user not found")
+		
 	}
 
 	if (user.status === UserStatus.BLOCKED) {
